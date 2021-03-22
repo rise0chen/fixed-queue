@@ -67,8 +67,8 @@ where
             has_receiver: AtomicBool::new(true),
         }
     }
-    pub fn channel(&self) -> (Option<Sender<T, N>>, Option<Receiver<T, N>>) {
-        let sender = match self.has_sender.compare_exchange_weak(
+    pub fn take_sender(&self) -> Option<Sender<T, N>> {
+        match self.has_sender.compare_exchange_weak(
             true,
             false,
             Ordering::SeqCst,
@@ -76,8 +76,10 @@ where
         ) {
             Ok(_) => Some(Sender::new(self)),
             Err(_) => None,
-        };
-        let receiver = match self.has_receiver.compare_exchange_weak(
+        }
+    }
+    pub fn take_recver(&self) -> Option<Receiver<T, N>> {
+        match self.has_receiver.compare_exchange_weak(
             true,
             false,
             Ordering::SeqCst,
@@ -85,8 +87,7 @@ where
         ) {
             Ok(_) => Some(Receiver::new(self)),
             Err(_) => None,
-        };
-        (sender, receiver)
+        }
     }
     fn ptr(&self) -> *mut T {
         self.buf.as_ptr() as *mut T
