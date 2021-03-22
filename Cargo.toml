@@ -1,6 +1,6 @@
 [package]
 name = "fixed-queue"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["rise0chen <rise0chen@163.com>"]
 description = "no_std, no_alloc, use [T; N]. support `Vec`/`VecDeque`/`spsc`/`History`"
 documentation = "https://docs.rs/fixed-queue"

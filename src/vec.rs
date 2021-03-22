@@ -53,7 +53,7 @@ impl<T, const N: usize> Vec<T, N> {
         }
     }
     pub fn push(&mut self, value: T) {
-        if self.len == Self::CAPACITY {
+        if self.len == self.capacity() {
             panic!("full.");
         }
         unsafe {
@@ -72,6 +72,17 @@ impl<T, const N: usize> Vec<T, N> {
             let hole = self.as_mut_ptr().add(index);
             self.set_len(len - 1);
             ptr::replace(hole, last)
+        }
+    }
+}
+impl<T: Clone, const N: usize> Vec<T, N> {
+    pub fn extend_from_slice(&mut self, other: &[T]) {
+        assert!(self.len + other.len() <= self.capacity());
+
+        let buf = unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len + other.len()) };
+        for item in other {
+            buf[self.len] = item.clone();
+            self.len += 1;
         }
     }
 }
