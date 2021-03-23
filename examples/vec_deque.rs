@@ -1,7 +1,7 @@
 use fixed_queue::VecDeque;
 
 fn main() {
-    let mut vec: VecDeque<u8, 3> = VecDeque::new();
+    let mut vec: VecDeque<u8, 4> = VecDeque::new();
     assert_eq!(vec.capacity(), 3);
     assert!(vec.is_empty());
     vec.push_back(1);

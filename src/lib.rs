@@ -1,7 +1,4 @@
 #![no_std]
-#![feature(const_fn)]
-#![feature(const_generics)]
-#![feature(const_evaluatable_checked)]
 
 mod history;
 pub mod spsc;

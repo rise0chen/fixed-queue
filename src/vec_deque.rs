@@ -2,20 +2,14 @@ use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::ptr;
 
-pub struct VecDeque<T, const N: usize>
-where
-    [u8; N + 1]: Sized,
-{
-    buf: MaybeUninit<[T; N + 1]>,
+pub struct VecDeque<T, const N: usize> {
+    buf: MaybeUninit<[T; N]>,
     head: usize,
     //Tail always points to the first element
     tail: usize,
 }
-impl<T, const N: usize> VecDeque<T, N>
-where
-    [u8; N + 1]: Sized,
-{
-    const CAPACITY: usize = N + 1;
+impl<T, const N: usize> VecDeque<T, N> {
+    const CAPACITY: usize = N;
     pub const fn new() -> Self {
         VecDeque {
             buf: MaybeUninit::uninit(),
@@ -128,10 +122,7 @@ where
         unsafe { self.buffer_write(head, value) }
     }
 }
-impl<T, const N: usize> Index<usize> for VecDeque<T, N>
-where
-    [u8; N + 1]: Sized,
-{
+impl<T, const N: usize> Index<usize> for VecDeque<T, N> {
     type Output = T;
 
     #[inline]
@@ -140,10 +131,7 @@ where
     }
 }
 
-impl<T, const N: usize> IndexMut<usize> for VecDeque<T, N>
-where
-    [u8; N + 1]: Sized,
-{
+impl<T, const N: usize> IndexMut<usize> for VecDeque<T, N> {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut T {
         self.get_mut(index).expect("Out of bounds access")

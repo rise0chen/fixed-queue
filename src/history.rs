@@ -5,12 +5,12 @@ use core::ops;
 use core::slice;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-pub struct History<T: PartialEq, const N: usize> {
+pub struct History<T, const N: usize> {
     is_full: AtomicBool,
     last: AtomicUsize,
     logs: MaybeUninit<[T; N]>,
 }
-impl<T: PartialEq, const N: usize> History<T, N> {
+impl<T, const N: usize> History<T, N> {
     const CAPACITY: usize = N;
     pub const fn new() -> Self {
         History {
@@ -22,6 +22,8 @@ impl<T: PartialEq, const N: usize> History<T, N> {
     fn as_ptr(&self) -> *mut T {
         self.logs.as_ptr() as *mut T
     }
+}
+impl<T: PartialEq, const N: usize> History<T, N> {
     /// 添加记录
     pub fn insert(&self, value: T) -> bool {
         if self.contains(&value) {
@@ -38,7 +40,7 @@ impl<T: PartialEq, const N: usize> History<T, N> {
         return true;
     }
 }
-impl<T: PartialEq, const N: usize> ops::Deref for History<T, N> {
+impl<T, const N: usize> ops::Deref for History<T, N> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {

@@ -2,16 +2,10 @@ use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-pub struct Sender<'a, T, const N: usize>
-where
-    [u8; N + 1]: Sized,
-{
+pub struct Sender<'a, T, const N: usize> {
     spsc: &'a Spsc<T, N>,
 }
-impl<'a, T, const N: usize> Sender<'a, T, N>
-where
-    [u8; N + 1]: Sized,
-{
+impl<'a, T, const N: usize> Sender<'a, T, N> {
     const fn new(spsc: &'a Spsc<T, N>) -> Self {
         Sender { spsc }
     }
@@ -19,17 +13,16 @@ where
         self.spsc.push(t)
     }
 }
+impl<'a, T, const N: usize> Drop for Sender<'a, T, N> {
+    fn drop(&mut self) {
+        unsafe { self.spsc.free_sender() };
+    }
+}
 
-pub struct Receiver<'a, T, const N: usize>
-where
-    [u8; N + 1]: Sized,
-{
+pub struct Receiver<'a, T, const N: usize> {
     spsc: &'a Spsc<T, N>,
 }
-impl<'a, T, const N: usize> Receiver<'a, T, N>
-where
-    [u8; N + 1]: Sized,
-{
+impl<'a, T, const N: usize> Receiver<'a, T, N> {
     const fn new(spsc: &'a Spsc<T, N>) -> Self {
         Receiver { spsc }
     }
@@ -41,23 +34,22 @@ where
         }
     }
 }
+impl<'a, T, const N: usize> Drop for Receiver<'a, T, N> {
+    fn drop(&mut self) {
+        unsafe { self.spsc.free_recver() };
+    }
+}
 
-pub struct Spsc<T, const N: usize>
-where
-    [u8; N + 1]: Sized,
-{
-    buf: MaybeUninit<[T; N + 1]>,
+pub struct Spsc<T, const N: usize> {
+    buf: MaybeUninit<[T; N]>,
     head: AtomicUsize,
     //Tail always points to the first element
     tail: AtomicUsize,
     has_sender: AtomicBool,
     has_receiver: AtomicBool,
 }
-impl<T, const N: usize> Spsc<T, N>
-where
-    [u8; N + 1]: Sized,
-{
-    const CAPACITY: usize = N + 1;
+impl<T, const N: usize> Spsc<T, N> {
+    const CAPACITY: usize = N;
     pub const fn new() -> Self {
         Spsc {
             buf: MaybeUninit::uninit(),
@@ -78,6 +70,9 @@ where
             Err(_) => None,
         }
     }
+    pub(crate) unsafe fn free_sender(&self) {
+        self.has_sender.store(true, Ordering::Relaxed)
+    }
     pub fn take_recver(&self) -> Option<Receiver<T, N>> {
         match self.has_receiver.compare_exchange_weak(
             true,
@@ -88,6 +83,9 @@ where
             Ok(_) => Some(Receiver::new(self)),
             Err(_) => None,
         }
+    }
+    pub(crate) unsafe fn free_recver(&self) {
+        self.has_receiver.store(true, Ordering::Relaxed)
     }
     fn ptr(&self) -> *mut T {
         self.buf.as_ptr() as *mut T
