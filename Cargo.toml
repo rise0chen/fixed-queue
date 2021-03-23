@@ -1,13 +1,13 @@
 [package]
 name = "fixed-queue"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["rise0chen <rise0chen@163.com>"]
 description = "no_std, no_alloc, use [T; N]. support `Vec`/`VecDeque`/`spsc`/`History`"
 documentation = "https://docs.rs/fixed-queue"
-homepage = "https://unmp.crise.cn"
-repository = "https://gitee.com/unmp/unmp.example.rust.git"
+homepage = "https://blog.crise.cn"
+repository = "https://github.com/rise0chen/fixed-queue.git"
 readme = "./README.md"
-keywords = ["fixed", "no_std", "queue", "spsc", "deque"]
+keywords = ["no_std", "vec", "queue", "spsc", "deque"]
 categories = ["data-structures", "embedded"]
 license-file = "LICENSE"
 edition = "2018"
