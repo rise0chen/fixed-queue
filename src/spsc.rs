@@ -144,8 +144,9 @@ impl<T, const N: usize> Spsc<T, N> {
             None
         } else {
             let tail = self.tail.load(Ordering::Relaxed);
+            let value = unsafe { Some(self.buffer_read(tail)) };
             self.tail.store(self.wrap_add(tail, 1), Ordering::Relaxed);
-            unsafe { Some(self.buffer_read(tail)) }
+            value
         }
     }
     fn push(&self, value: T) -> Result<(), T> {
@@ -154,8 +155,8 @@ impl<T, const N: usize> Spsc<T, N> {
         }
 
         let head = self.head.load(Ordering::Relaxed);
-        self.head.store(self.wrap_add(head, 1), Ordering::Relaxed);
         unsafe { self.buffer_write(head, value) };
+        self.head.store(self.wrap_add(head, 1), Ordering::Relaxed);
         Ok(())
     }
 }
