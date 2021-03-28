@@ -1,3 +1,4 @@
+use core::convert::From;
 use core::mem::MaybeUninit;
 use core::ops;
 use core::{ptr, slice};
@@ -97,5 +98,12 @@ impl<T, const N: usize> ops::Deref for Vec<T, N> {
 impl<T, const N: usize> ops::DerefMut for Vec<T, N> {
     fn deref_mut(&mut self) -> &mut [T] {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len) }
+    }
+}
+impl<T: Clone, const N: usize> From<&[T]> for Vec<T, N> {
+    fn from(slice: &[T]) -> Self {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(slice);
+        vec
     }
 }
