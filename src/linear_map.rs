@@ -1,6 +1,8 @@
 //! 历史记录
 
 use crate::vec::Vec;
+use core::borrow::{Borrow, BorrowMut};
+use core::convert::{AsMut, AsRef};
 use core::mem;
 use core::ops;
 
@@ -55,15 +57,35 @@ impl<K: PartialEq, V, const N: usize> LinearMap<K, V, N> {
     }
 }
 
-impl<K: PartialEq, V, const N: usize> ops::Deref for LinearMap<K, V, N> {
+impl<K, V, const N: usize> ops::Deref for LinearMap<K, V, N> {
     type Target = [(K, V)];
 
     fn deref(&self) -> &[(K, V)] {
         self.vec.deref()
     }
 }
-impl<K: PartialEq, V, const N: usize> ops::DerefMut for LinearMap<K, V, N> {
+impl<K, V, const N: usize> ops::DerefMut for LinearMap<K, V, N> {
     fn deref_mut(&mut self) -> &mut [(K, V)] {
         self.vec.deref_mut()
+    }
+}
+impl<K, V, const N: usize> AsRef<[(K, V)]> for LinearMap<K, V, N> {
+    fn as_ref(&self) -> &[(K, V)] {
+        self
+    }
+}
+impl<K, V, const N: usize> AsMut<[(K, V)]> for LinearMap<K, V, N> {
+    fn as_mut(&mut self) -> &mut [(K, V)] {
+        self
+    }
+}
+impl<K, V, const N: usize> Borrow<[(K, V)]> for LinearMap<K, V, N> {
+    fn borrow(&self) -> &[(K, V)] {
+        &self[..]
+    }
+}
+impl<K, V, const N: usize> BorrowMut<[(K, V)]> for LinearMap<K, V, N> {
+    fn borrow_mut(&mut self) -> &mut [(K, V)] {
+        &mut self[..]
     }
 }

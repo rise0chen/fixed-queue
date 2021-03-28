@@ -1,4 +1,5 @@
-use core::convert::From;
+use core::borrow::{Borrow, BorrowMut};
+use core::convert::{AsMut, AsRef, From};
 use core::mem::MaybeUninit;
 use core::ops;
 use core::{ptr, slice};
@@ -105,5 +106,25 @@ impl<T: Clone, const N: usize> From<&[T]> for Vec<T, N> {
         let mut vec = Vec::new();
         vec.extend_from_slice(slice);
         vec
+    }
+}
+impl<T, const N: usize> AsRef<[T]> for Vec<T, N> {
+    fn as_ref(&self) -> &[T] {
+        self
+    }
+}
+impl<T, const N: usize> AsMut<[T]> for Vec<T, N> {
+    fn as_mut(&mut self) -> &mut [T] {
+        self
+    }
+}
+impl<T, const N: usize> Borrow<[T]> for Vec<T, N> {
+    fn borrow(&self) -> &[T] {
+        &self[..]
+    }
+}
+impl<T, const N: usize> BorrowMut<[T]> for Vec<T, N> {
+    fn borrow_mut(&mut self) -> &mut [T] {
+        &mut self[..]
     }
 }

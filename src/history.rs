@@ -1,5 +1,7 @@
 //! 历史记录
 
+use core::borrow::Borrow;
+use core::convert::AsRef;
 use core::mem::MaybeUninit;
 use core::ops;
 use core::slice;
@@ -49,5 +51,15 @@ impl<T, const N: usize> ops::Deref for History<T, N> {
         } else {
             unsafe { slice::from_raw_parts(self.as_ptr(), self.last.load(Ordering::Relaxed)) }
         }
+    }
+}
+impl<T, const N: usize> AsRef<[T]> for History<T, N> {
+    fn as_ref(&self) -> &[T] {
+        self
+    }
+}
+impl<T, const N: usize> Borrow<[T]> for History<T, N> {
+    fn borrow(&self) -> &[T] {
+        &self[..]
     }
 }

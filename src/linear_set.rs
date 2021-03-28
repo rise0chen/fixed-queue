@@ -1,6 +1,8 @@
 //! 历史记录
 
 use crate::vec::Vec;
+use core::borrow::{Borrow, BorrowMut};
+use core::convert::{AsMut, AsRef};
 use core::ops;
 
 pub struct LinearSet<T, const N: usize> {
@@ -47,15 +49,35 @@ impl<T: PartialEq, const N: usize> LinearSet<T, N> {
     }
 }
 
-impl<T: PartialEq, const N: usize> ops::Deref for LinearSet<T, N> {
+impl<T, const N: usize> ops::Deref for LinearSet<T, N> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
         self.vec.deref()
     }
 }
-impl<T: PartialEq, const N: usize> ops::DerefMut for LinearSet<T, N> {
+impl<T, const N: usize> ops::DerefMut for LinearSet<T, N> {
     fn deref_mut(&mut self) -> &mut [T] {
         self.vec.deref_mut()
+    }
+}
+impl<T, const N: usize> AsRef<[T]> for LinearSet<T, N> {
+    fn as_ref(&self) -> &[T] {
+        self
+    }
+}
+impl<T, const N: usize> AsMut<[T]> for LinearSet<T, N> {
+    fn as_mut(&mut self) -> &mut [T] {
+        self
+    }
+}
+impl<T, const N: usize> Borrow<[T]> for LinearSet<T, N> {
+    fn borrow(&self) -> &[T] {
+        &self[..]
+    }
+}
+impl<T, const N: usize> BorrowMut<[T]> for LinearSet<T, N> {
+    fn borrow_mut(&mut self) -> &mut [T] {
+        &mut self[..]
     }
 }
