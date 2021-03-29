@@ -25,6 +25,12 @@ impl<T, const N: usize> Vec<T, N> {
     pub fn as_mut_ptr(&mut self) -> *mut T {
         self.buf.as_mut_ptr() as *mut T
     }
+    pub fn as_slice(&self) -> &[T] {
+        self
+    }
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        self
+    }
     pub fn clear(&mut self) {
         self.truncate(0);
     }
