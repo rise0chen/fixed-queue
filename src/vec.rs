@@ -1,5 +1,6 @@
 use core::borrow::{Borrow, BorrowMut};
 use core::convert::{AsMut, AsRef, From};
+use core::fmt;
 use core::mem::MaybeUninit;
 use core::ops;
 use core::{ptr, slice};
@@ -132,5 +133,10 @@ impl<T, const N: usize> Borrow<[T]> for Vec<T, N> {
 impl<T, const N: usize> BorrowMut<[T]> for Vec<T, N> {
     fn borrow_mut(&mut self) -> &mut [T] {
         &mut self[..]
+    }
+}
+impl<T: fmt::Debug, const N: usize> fmt::Debug for Vec<T, N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
     }
 }
