@@ -6,6 +6,10 @@ no_std, no_alloc, use [T; N].
 
 support `Vec`/`VecDeque`/`spsc`/`History`.
 
+## Deprecated
+
+Replaced by [heapless](https://docs.rs/heapless/0.7.3/heapless/).
+
 ## Usage
 
 ### Vec
