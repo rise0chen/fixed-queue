@@ -1,6 +1,7 @@
 use fixed_queue::VecDeque;
 
-fn main() {
+#[test]
+fn vec_deque() {
     let mut vec: VecDeque<u8, 4> = VecDeque::new();
     assert_eq!(vec.capacity(), 3);
     assert!(vec.is_empty());

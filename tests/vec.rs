@@ -1,6 +1,7 @@
 use fixed_queue::Vec;
 
-fn main() {
+#[test]
+fn vec() {
     let mut vec: Vec<u8, 3> = Vec::new();
     assert_eq!(vec.capacity(), 3);
     assert!(vec.is_empty());

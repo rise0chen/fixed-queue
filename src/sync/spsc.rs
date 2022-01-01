@@ -9,7 +9,7 @@ impl<'a, T, const N: usize> Sender<'a, T, N> {
     const fn new(spsc: &'a Spsc<T, N>) -> Self {
         Sender { spsc }
     }
-    pub fn send(&self, t: T) -> Result<(), T> {
+    pub fn send(&mut self, t: T) -> Result<(), T> {
         self.spsc.push(t)
     }
 }
@@ -26,12 +26,8 @@ impl<'a, T, const N: usize> Receiver<'a, T, N> {
     const fn new(spsc: &'a Spsc<T, N>) -> Self {
         Receiver { spsc }
     }
-    pub fn try_recv(&self) -> Result<T, ()> {
-        if let Some(t) = self.spsc.pop() {
-            Ok(t)
-        } else {
-            Err(())
-        }
+    pub fn try_recv(&mut self) -> Option<T> {
+        self.spsc.pop()
     }
 }
 impl<'a, T, const N: usize> Drop for Receiver<'a, T, N> {

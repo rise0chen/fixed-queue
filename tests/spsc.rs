@@ -1,8 +1,9 @@
-use fixed_queue::Spsc;
+use fixed_queue::sync::Spsc;
 static SPSC: Spsc<u8, 4> = Spsc::new();
 
-fn main() {
-    let sender = SPSC.take_sender().unwrap();
+#[test]
+fn spsc() {
+    let mut sender = SPSC.take_sender().unwrap();
     let recver = SPSC.take_recver().unwrap();
     let tmp_sender = SPSC.take_sender();
     assert!(tmp_sender.is_none());
@@ -14,7 +15,7 @@ fn main() {
     assert!(sender.send(4).is_err());
 
     drop(recver);
-    let recver = SPSC.take_recver().unwrap();
+    let mut recver = SPSC.take_recver().unwrap();
     println!("{:?}", recver.try_recv());
     println!("{:?}", recver.try_recv());
     println!("{:?}", recver.try_recv());
