@@ -40,8 +40,8 @@ impl<T, const N: usize> Vec<T, N> {
             if len > self.len {
                 return;
             }
-            let remaining_len = self.len - len;
-            let s = ptr::slice_from_raw_parts_mut(self.as_mut_ptr().add(len), remaining_len);
+            let remove_len = self.len - len;
+            let s = ptr::slice_from_raw_parts_mut(self.as_mut_ptr().add(len), remove_len);
             self.len = len;
             ptr::drop_in_place(s);
         }
@@ -61,15 +61,16 @@ impl<T, const N: usize> Vec<T, N> {
             }
         }
     }
-    pub fn push(&mut self, value: T) {
+    pub fn push(&mut self, value: T) -> Result<(), T> {
         if self.len == self.capacity() {
-            panic!("full.");
+            return Err(value);
         }
         unsafe {
             let end = self.as_mut_ptr().add(self.len);
             ptr::write(end, value);
             self.len += 1;
         }
+        Ok(())
     }
     pub fn swap_remove(&mut self, index: usize) -> T {
         let len = self.len();
@@ -138,5 +139,10 @@ impl<T, const N: usize> BorrowMut<[T]> for Vec<T, N> {
 impl<T: fmt::Debug, const N: usize> fmt::Debug for Vec<T, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
+    }
+}
+impl<T, const N: usize> Drop for Vec<T, N> {
+    fn drop(&mut self) {
+        self.clear();
     }
 }

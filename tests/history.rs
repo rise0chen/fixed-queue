@@ -1,12 +1,21 @@
+mod common;
+
+use common::*;
 use fixed_queue::History;
 
 #[test]
-fn history() {
-    let mut history: History<u8, 3> = History::new();
-    history.insert(1);
-    history.insert(2);
-    history.insert(3);
-    assert!(history.contains(&1));
-    history.insert(4);
-    assert!(!history.contains(&1));
+fn test_base() {
+    let mut history: History<TestUsize, 3> = History::new();
+    history.insert(TEST1.clone());
+    history.insert(TEST2.clone());
+    history.insert(TEST3.clone());
+    assert!(history.contains(&TEST1));
+    history.insert(TEST4.clone());
+    assert!(!history.contains(&TEST1));
+}
+
+#[test]
+fn test_drop() {
+    let mut history: History<TestUsize, 3> = History::new();
+    history.insert(TEST1.clone());
 }

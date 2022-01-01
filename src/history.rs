@@ -3,8 +3,8 @@
 use core::borrow::Borrow;
 use core::convert::AsRef;
 use core::mem::MaybeUninit;
-use core::ops;
-use core::slice;
+use core::ops::{Deref, DerefMut};
+use core::{ptr, slice};
 
 pub struct History<T, const N: usize> {
     is_full: bool,
@@ -28,16 +28,21 @@ impl<T: PartialEq, const N: usize> History<T, N> {
     /// 添加记录
     pub fn insert(&mut self, value: T) {
         let last = self.last;
+        let ret = if self.is_full {
+            unsafe { slice::from_raw_parts_mut(self.as_ptr(), Self::CAPACITY)[last] = value };
+        } else {
+            unsafe { ptr::write(self.as_ptr().add(last), value) };
+        };
         if last == Self::CAPACITY - 1 {
             self.last = 0;
             self.is_full = true;
         } else {
             self.last = last + 1;
         }
-        unsafe { slice::from_raw_parts_mut(self.as_ptr(), Self::CAPACITY)[last] = value };
+        ret
     }
 }
-impl<T, const N: usize> ops::Deref for History<T, N> {
+impl<T, const N: usize> Deref for History<T, N> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
@@ -45,6 +50,15 @@ impl<T, const N: usize> ops::Deref for History<T, N> {
             unsafe { slice::from_raw_parts(self.as_ptr(), Self::CAPACITY) }
         } else {
             unsafe { slice::from_raw_parts(self.as_ptr(), self.last) }
+        }
+    }
+}
+impl<T, const N: usize> DerefMut for History<T, N> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        if self.is_full {
+            unsafe { slice::from_raw_parts_mut(self.as_ptr(), Self::CAPACITY) }
+        } else {
+            unsafe { slice::from_raw_parts_mut(self.as_ptr(), self.last) }
         }
     }
 }
@@ -56,5 +70,10 @@ impl<T, const N: usize> AsRef<[T]> for History<T, N> {
 impl<T, const N: usize> Borrow<[T]> for History<T, N> {
     fn borrow(&self) -> &[T] {
         &self[..]
+    }
+}
+impl<T, const N: usize> Drop for History<T, N> {
+    fn drop(&mut self) {
+        unsafe { ptr::drop_in_place(self.deref_mut()) };
     }
 }

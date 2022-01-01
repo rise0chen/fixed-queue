@@ -1,10 +1,18 @@
 # Fixed-Queue
 
-A heapless version of the Rust `Vec`, `VecDeque`.
-
-no_std, no_alloc, use [T; N].
+Some Commin Data Structure, use [T; N].
 
 support `Vec`/`VecDeque`/`spsc`/`mpmc`/`History`.
+
+## Features
+
+All Data Structure has these Features:
+
+- `const`: static friendly
+- `no_std`: Can run in embedded devices
+- `no_alloc`: Needn't dynamic memory allocation
+- Lock Free
+- Wait Free
 
 ## Usage
 

@@ -1,9 +1,8 @@
 use super::common::MemoryState;
 use core::mem::MaybeUninit;
-use core::ptr;
 use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use core::{ptr, slice};
 
-const BOOL: AtomicU8 = AtomicU8::new(MemoryState::Uninitialized as u8);
 pub struct Sender<'a, T, const N: usize> {
     mpmc: &'a Mpmc<T, N>,
 }
@@ -31,19 +30,20 @@ impl<'a, T, const N: usize> Receiver<'a, T, N> {
 #[derive(Debug)]
 pub struct Mpmc<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
-    head: AtomicUsize,
+    end: AtomicUsize,
     //Tail always points to the first element
-    tail: AtomicUsize,
+    start: AtomicUsize,
     states: [AtomicU8; N],
 }
 impl<T, const N: usize> Mpmc<T, N> {
     const CAPACITY: usize = N;
+    const INIT_STATE: AtomicU8 = AtomicU8::new(MemoryState::Uninitialized as u8);
     pub const fn new() -> Self {
         Mpmc {
             buf: MaybeUninit::uninit(),
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
-            states: [BOOL; N],
+            end: AtomicUsize::new(0),
+            start: AtomicUsize::new(0),
+            states: [Self::INIT_STATE; N],
         }
     }
     pub fn sender(&self) -> Sender<T, N> {
@@ -62,18 +62,18 @@ impl<T, const N: usize> Mpmc<T, N> {
         self.cap() - 1
     }
     fn len(&self) -> usize {
-        let tail = self.tail.load(Ordering::Relaxed);
-        let head = self.head.load(Ordering::Relaxed);
-        if head >= tail {
-            head - tail
+        let start = self.start.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
+        if end >= start {
+            end - start
         } else {
-            self.cap() - tail + head
+            self.cap() - start + end
         }
     }
     pub fn is_empty(&self) -> bool {
-        let tail = self.tail.load(Ordering::Relaxed);
-        let head = self.head.load(Ordering::Relaxed);
-        tail == head
+        let start = self.start.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
+        start == end
     }
     pub fn is_full(&self) -> bool {
         self.cap() - self.len() == 1
@@ -104,55 +104,70 @@ impl<T, const N: usize> Mpmc<T, N> {
             index
         }
     }
-    fn head_add(&self, old: usize) {
-        let _ = self
-            .head
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
-                if x <= old {
-                    Some(self.wrap_add(old, 1))
-                } else {
-                    None
-                }
-            });
+    fn add_ptr_end(&self, old: usize) {
+        let _ = self.end.compare_exchange_weak(
+            old,
+            self.wrap_add(old, 1),
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        );
     }
-    fn tail_add(&self, old: usize) {
-        let _ = self
-            .tail
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
-                if x <= old {
-                    Some(self.wrap_add(old, 1))
-                } else {
-                    None
-                }
-            });
+    fn add_ptr_start(&self, old: usize) {
+        let _ = self.start.compare_exchange_weak(
+            old,
+            self.wrap_add(old, 1),
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        );
+    }
+    pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
+        let ptr = self.ptr();
+        let start = self.start.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
+        if end >= start {
+            (
+                unsafe { slice::from_raw_parts_mut(ptr.add(start), end - start) },
+                &mut [],
+            )
+        } else {
+            (
+                unsafe { slice::from_raw_parts_mut(ptr.add(start), N - start) },
+                unsafe { slice::from_raw_parts_mut(ptr, end) },
+            )
+        }
+    }
+    pub fn clear(&mut self) {
+        let (a, b) = self.as_mut_slices();
+        unsafe { ptr::drop_in_place(a) };
+        unsafe { ptr::drop_in_place(b) };
+        self.end.store(0, Ordering::Relaxed);
+        self.start.store(0, Ordering::Relaxed);
+        self.states = [Self::INIT_STATE; N];
     }
     pub fn pop(&self) -> Option<T> {
         if self.is_empty() {
             None
         } else {
-            let tail = self.tail.load(Ordering::Relaxed);
+            let start = self.start.load(Ordering::Relaxed);
             if let Err(state) =
-                self.states[tail].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
+                self.states[start].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
                     match MemoryState::from(x) {
-                        MemoryState::Written => {
-                            self.tail_add(tail);
-                            Some(MemoryState::Reading.into())
-                        }
-                        MemoryState::Reading | MemoryState::Readed => {
-                            self.tail_add(tail);
-                            None
-                        }
+                        MemoryState::Written => Some(MemoryState::Reading as u8),
                         _ => None,
                     }
                 })
             {
                 match MemoryState::from(state) {
-                    MemoryState::Reading | MemoryState::Readed => self.pop(),
+                    MemoryState::Reading | MemoryState::Readed => {
+                        self.add_ptr_start(start);
+                        self.pop()
+                    }
                     _ => None,
                 }
             } else {
-                let ret = unsafe { Some(self.buffer_read(tail)) };
-                self.states[tail].store(MemoryState::Readed.into(), Ordering::Relaxed);
+                self.add_ptr_start(start);
+                let ret = unsafe { Some(self.buffer_read(start)) };
+                self.states[start].store(MemoryState::Readed.into(), Ordering::Relaxed);
                 ret
             }
         }
@@ -161,30 +176,34 @@ impl<T, const N: usize> Mpmc<T, N> {
         if self.is_full() {
             return Err(value);
         }
-        let head = self.head.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
         if let Err(state) =
-            self.states[head].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
+            self.states[end].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
                 match MemoryState::from(x) {
                     MemoryState::Uninitialized | MemoryState::Readed => {
-                        self.head_add(head);
-                        Some(MemoryState::Writting.into())
-                    }
-                    MemoryState::Writting | MemoryState::Written => {
-                        self.head_add(head);
-                        None
+                        Some(MemoryState::Writting as u8)
                     }
                     _ => None,
                 }
             })
         {
             match MemoryState::from(state) {
-                MemoryState::Writting | MemoryState::Written => self.push(value),
+                MemoryState::Writting | MemoryState::Written => {
+                    self.add_ptr_end(end);
+                    self.push(value)
+                }
                 _ => Err(value),
             }
         } else {
-            unsafe { self.buffer_write(head, value) };
-            self.states[head].store(MemoryState::Written.into(), Ordering::Relaxed);
+            self.add_ptr_end(end);
+            unsafe { self.buffer_write(end, value) };
+            self.states[end].store(MemoryState::Written.into(), Ordering::Relaxed);
             Ok(())
         }
+    }
+}
+impl<T, const N: usize> Drop for Mpmc<T, N> {
+    fn drop(&mut self) {
+        self.clear()
     }
 }

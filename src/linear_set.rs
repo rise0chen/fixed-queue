@@ -9,12 +9,16 @@ pub struct LinearSet<T, const N: usize> {
     vec: Vec<T, N>,
 }
 impl<T, const N: usize> LinearSet<T, N> {
+    const CAPACITY: usize = N;
     pub const fn new() -> Self {
         LinearSet { vec: Vec::new() }
     }
+    pub fn capacity(&self) -> usize {
+        Self::CAPACITY
+    }
 }
 impl<T: PartialEq, const N: usize> LinearSet<T, N> {
-    fn get_index(&self, value: &T) -> Option<usize> {
+    pub fn get_index(&self, value: &T) -> Option<usize> {
         if let Some((i, _item)) = self.iter().enumerate().find(|(_i, item)| item == &value) {
             Some(i)
         } else {
@@ -31,12 +35,12 @@ impl<T: PartialEq, const N: usize> LinearSet<T, N> {
     pub fn contains(&self, value: &T) -> bool {
         self.iter().any(|x| x == value)
     }
-    pub fn insert(&mut self, value: T) -> bool {
+    pub fn insert(&mut self, value: T) -> Result<bool, T> {
         if let Some(_) = self.get_index(&value) {
-            false
+            Ok(false)
         } else {
-            self.vec.push(value);
-            true
+            self.vec.push(value)?;
+            Ok(true)
         }
     }
     pub fn remove(&mut self, value: &T) -> bool {

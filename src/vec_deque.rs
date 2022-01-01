@@ -1,45 +1,47 @@
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
-use core::ptr;
+use core::{ptr, slice};
 
+#[derive(Debug)]
 pub struct VecDeque<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
-    head: usize,
+    end: usize,
     //Tail always points to the first element
-    tail: usize,
+    start: usize,
+    is_full: bool,
 }
 impl<T, const N: usize> VecDeque<T, N> {
     const CAPACITY: usize = N;
     pub const fn new() -> Self {
         VecDeque {
             buf: MaybeUninit::uninit(),
-            head: 0,
-            tail: 0,
+            end: 0,
+            start: 0,
+            is_full: false,
         }
     }
     fn ptr(&self) -> *mut T {
         self.buf.as_ptr() as *mut T
     }
-    fn cap(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         Self::CAPACITY
     }
-    pub fn capacity(&self) -> usize {
-        self.cap() - 1
-    }
     pub fn len(&self) -> usize {
-        let tail = self.tail;
-        let head = self.head;
-        if head >= tail {
-            head - tail
+        let start = self.start;
+        let end = self.end;
+        if self.is_full() {
+            self.capacity()
+        } else if end >= start {
+            end - start
         } else {
-            self.cap() - tail + head
+            self.capacity() - start + end
         }
     }
     pub fn is_empty(&self) -> bool {
-        self.tail == self.head
+        self.start == self.end && !self.is_full
     }
     pub fn is_full(&self) -> bool {
-        self.cap() - self.len() == 1
+        self.is_full
     }
     #[inline]
     unsafe fn buffer_read(&mut self, off: usize) -> T {
@@ -52,8 +54,8 @@ impl<T, const N: usize> VecDeque<T, N> {
     #[inline]
     fn wrap_add(&self, idx: usize, addend: usize) -> usize {
         let (index, overflow) = idx.overflowing_add(addend);
-        if index >= self.cap() || overflow {
-            index.wrapping_sub(self.cap())
+        if index >= self.capacity() || overflow {
+            index.wrapping_sub(self.capacity())
         } else {
             index
         }
@@ -62,14 +64,14 @@ impl<T, const N: usize> VecDeque<T, N> {
     fn wrap_sub(&self, idx: usize, subtrahend: usize) -> usize {
         let (index, overflow) = idx.overflowing_sub(subtrahend);
         if overflow {
-            index.wrapping_add(self.cap())
+            index.wrapping_add(self.capacity())
         } else {
             index
         }
     }
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.len() {
-            let idx = self.wrap_add(self.tail, index);
+            let idx = self.wrap_add(self.start, index);
             unsafe { Some(&*self.ptr().add(idx)) }
         } else {
             None
@@ -77,49 +79,95 @@ impl<T, const N: usize> VecDeque<T, N> {
     }
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index < self.len() {
-            let idx = self.wrap_add(self.tail, index);
+            let idx = self.wrap_add(self.start, index);
             unsafe { Some(&mut *self.ptr().add(idx)) }
         } else {
             None
         }
     }
+    pub fn as_slices(&mut self) -> (&[T], &[T]) {
+        let ptr = self.ptr() as *const T;
+        if self.end >= self.start && !self.is_full {
+            (
+                unsafe { slice::from_raw_parts(ptr.add(self.start), self.end - self.start) },
+                &mut [],
+            )
+        } else {
+            (
+                unsafe { slice::from_raw_parts(ptr.add(self.start), N - self.start) },
+                unsafe { slice::from_raw_parts(ptr, self.end) },
+            )
+        }
+    }
+    pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
+        let ptr = self.ptr();
+        if self.end >= self.start && !self.is_full {
+            (
+                unsafe { slice::from_raw_parts_mut(ptr.add(self.start), self.end - self.start) },
+                &mut [],
+            )
+        } else {
+            (
+                unsafe { slice::from_raw_parts_mut(ptr.add(self.start), N - self.start) },
+                unsafe { slice::from_raw_parts_mut(ptr, self.end) },
+            )
+        }
+    }
+    pub fn clear(&mut self) {
+        let (a, b) = self.as_mut_slices();
+        unsafe { ptr::drop_in_place(a) };
+        unsafe { ptr::drop_in_place(b) };
+        self.end = 0;
+        self.start = 0;
+        self.is_full = false;
+    }
     pub fn pop_front(&mut self) -> Option<T> {
         if self.is_empty() {
             None
         } else {
-            let tail = self.tail;
-            self.tail = self.wrap_add(self.tail, 1);
-            unsafe { Some(self.buffer_read(tail)) }
+            let start = self.start;
+            self.start = self.wrap_add(self.start, 1);
+            if self.is_full {
+                self.is_full = false;
+            }
+            unsafe { Some(self.buffer_read(start)) }
         }
     }
     pub fn pop_back(&mut self) -> Option<T> {
         if self.is_empty() {
             None
         } else {
-            self.head = self.wrap_sub(self.head, 1);
-            let head = self.head;
-            unsafe { Some(self.buffer_read(head)) }
+            self.end = self.wrap_sub(self.end, 1);
+            let end = self.end;
+            if self.is_full {
+                self.is_full = false;
+            }
+            unsafe { Some(self.buffer_read(end)) }
         }
     }
-    pub fn push_front(&mut self, value: T) {
+    pub fn push_front(&mut self, value: T) -> Result<(), T> {
         if self.is_full() {
-            panic!("full.");
+            return Err(value);
         }
 
-        self.tail = self.wrap_sub(self.tail, 1);
-        let tail = self.tail;
-        unsafe {
-            self.buffer_write(tail, value);
+        if self.len() == self.capacity() - 1 {
+            self.is_full = true;
         }
+        self.start = self.wrap_sub(self.start, 1);
+        unsafe { self.buffer_write(self.start, value) };
+        Ok(())
     }
-    pub fn push_back(&mut self, value: T) {
+    pub fn push_back(&mut self, value: T) -> Result<(), T> {
         if self.is_full() {
-            panic!("full.");
+            return Err(value);
         }
 
-        let head = self.head;
-        self.head = self.wrap_add(self.head, 1);
-        unsafe { self.buffer_write(head, value) }
+        if self.len() == self.capacity() - 1 {
+            self.is_full = true;
+        }
+        unsafe { self.buffer_write(self.end, value) };
+        self.end = self.wrap_add(self.end, 1);
+        Ok(())
     }
 }
 impl<T, const N: usize> Index<usize> for VecDeque<T, N> {
@@ -135,5 +183,10 @@ impl<T, const N: usize> IndexMut<usize> for VecDeque<T, N> {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut T {
         self.get_mut(index).expect("Out of bounds access")
+    }
+}
+impl<T, const N: usize> Drop for VecDeque<T, N> {
+    fn drop(&mut self) {
+        self.clear()
     }
 }

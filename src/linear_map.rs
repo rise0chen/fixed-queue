@@ -10,8 +10,12 @@ pub struct LinearMap<K, V, const N: usize> {
     vec: Vec<(K, V), N>,
 }
 impl<K, V, const N: usize> LinearMap<K, V, N> {
+    const CAPACITY: usize = N;
     pub const fn new() -> Self {
         LinearMap { vec: Vec::new() }
+    }
+    pub fn capacity(&self) -> usize {
+        Self::CAPACITY
     }
 }
 impl<K: PartialEq, V, const N: usize> LinearMap<K, V, N> {
@@ -39,12 +43,12 @@ impl<K: PartialEq, V, const N: usize> LinearMap<K, V, N> {
     pub fn contains_key(&self, key: &K) -> bool {
         self.iter().any(|x| &x.0 == key)
     }
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert(&mut self, key: K, value: V) -> Result<Option<V>, (K, V)> {
         if let Some(i) = self.get_index(&key) {
-            Some(mem::replace(&mut self[i].1, value))
+            Ok(Some(mem::replace(&mut self[i].1, value)))
         } else {
-            self.vec.push((key, value));
-            None
+            self.vec.push((key, value))?;
+            Ok(None)
         }
     }
     pub fn remove(&mut self, key: &K) -> Option<V> {
