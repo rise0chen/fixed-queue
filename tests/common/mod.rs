@@ -33,7 +33,9 @@ impl Drop for TestUsize {
         if self.is_init == INIT_CODE.wrapping_add(self.data) {
             self.is_init = 0;
             self.drop_time += 1;
-            println!("{} drop {} times", self.data, self.drop_time);
+            if self.drop_time != 1 {
+                panic!("{} is drop {} times", self.data, self.drop_time);
+            }
         } else {
             panic!("{} is uninitialized", self.data);
         }

@@ -58,7 +58,7 @@ impl<T, const N: usize> Spsc<T, N> {
         }
     }
     pub fn take_sender(&self) -> Option<Sender<T, N>> {
-        match self.has_sender.compare_exchange_weak(
+        match self.has_sender.compare_exchange(
             true,
             false,
             Ordering::SeqCst,
@@ -72,7 +72,7 @@ impl<T, const N: usize> Spsc<T, N> {
         self.has_sender.store(true, Ordering::Relaxed)
     }
     pub fn take_recver(&self) -> Option<Receiver<T, N>> {
-        match self.has_receiver.compare_exchange_weak(
+        match self.has_receiver.compare_exchange(
             true,
             false,
             Ordering::SeqCst,

@@ -1,8 +1,10 @@
 mod common;
 
 use common::*;
+use core::time::Duration;
 use etime::{expect_time, Etime};
 use fixed_queue::sync::mpmc::Mpmc;
+use std::thread;
 
 #[test]
 fn test_base() {
@@ -30,32 +32,26 @@ fn test_drop() {
 }
 
 #[test]
-fn test_mul() {
-    use core::time::Duration;
-    use std::thread;
-
-    let etime = Etime::new();
-    etime.tic();
-    static MPMC: Mpmc<u16, 100> = Mpmc::new();
-    for i in 0..5000 {
+fn test_mpmc() {
+    static MPMC: Mpmc<TestUsize, 100> = Mpmc::new();
+    for i in 0..1000 {
         thread::spawn(move || loop {
             let etime = Etime::new();
             etime.tic();
-            let result = MPMC.push(i);
+            let result = MPMC.push(TestUsize::new(i));
             expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
                 println!("time to push: {:?}", t);
             });
             if result.is_ok() {
                 break;
             } else {
-                if MPMC.is_full() {
-                    thread::sleep(Duration::from_millis(1));
-                }
+                thread::sleep(Duration::from_micros(i as u64));
             }
         });
     }
+
     let mut handle = Vec::new();
-    for _ in 0..5000 {
+    for i in 0..1000 {
         handle.push(thread::spawn(move || loop {
             let etime = Etime::new();
             etime.tic();
@@ -66,16 +62,109 @@ fn test_mul() {
             if let Some(_) = result {
                 break;
             } else {
-                if MPMC.is_empty() {
-                    thread::sleep(Duration::from_millis(1));
-                }
+                thread::sleep(Duration::from_micros(i as u64));
             }
         }));
     }
+    let etime = Etime::new();
+    etime.tic();
     for h in handle {
         let _ = h.join();
     }
-    expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
+    expect_time(etime.toc(), Duration::ZERO..Duration::ZERO, |t| {
         println!("time to all: {:?}", t);
     });
+    assert!(MPMC.is_empty());
+}
+
+#[test]
+fn test_mpsc() {
+    static MPMC: Mpmc<TestUsize, 100> = Mpmc::new();
+    for i in 0..1000 {
+        thread::spawn(move || loop {
+            let etime = Etime::new();
+            etime.tic();
+            let result = MPMC.push(TestUsize::new(i));
+            expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
+                println!("time to push: {:?}", t);
+            });
+            if result.is_ok() {
+                break;
+            } else {
+                thread::sleep(Duration::from_micros(i as u64));
+            }
+        });
+    }
+
+    let h = thread::spawn(move || {
+        for _ in 0..1000 {
+            loop {
+                let etime = Etime::new();
+                etime.tic();
+                let result = MPMC.pop();
+                expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
+                    println!("time to pop: {:?}", t);
+                });
+                if let Some(_) = result {
+                    break;
+                } else {
+                    thread::yield_now();
+                }
+            }
+        }
+    });
+    let etime = Etime::new();
+    etime.tic();
+    let _ = h.join();
+    expect_time(etime.toc(), Duration::ZERO..Duration::ZERO, |t| {
+        println!("time to all: {:?}", t);
+    });
+    assert!(MPMC.is_empty());
+}
+
+#[test]
+fn test_spsc() {
+    static MPMC: Mpmc<TestUsize, 100> = Mpmc::new();
+    thread::spawn(move || {
+        for i in 0..1000 {
+            loop {
+                let etime = Etime::new();
+                etime.tic();
+                let result = MPMC.push(TestUsize::new(i));
+                expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
+                    println!("time to push: {:?}", t);
+                });
+                if result.is_ok() {
+                    break;
+                } else {
+                    thread::yield_now();
+                }
+            }
+        }
+    });
+
+    let h = thread::spawn(move || {
+        for _ in 0..1000 {
+            loop {
+                let etime = Etime::new();
+                etime.tic();
+                let result = MPMC.pop();
+                expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
+                    println!("time to pop: {:?}", t);
+                });
+                if let Some(_) = result {
+                    break;
+                } else {
+                    thread::yield_now();
+                }
+            }
+        }
+    });
+    let etime = Etime::new();
+    etime.tic();
+    let _ = h.join();
+    expect_time(etime.toc(), Duration::ZERO..Duration::ZERO, |t| {
+        println!("time to all: {:?}", t);
+    });
+    assert!(MPMC.is_empty());
 }

@@ -61,22 +61,23 @@ impl<T, const N: usize> Mpmc<T, N> {
     pub fn capacity(&self) -> usize {
         self.cap() - 1
     }
-    fn len(&self) -> usize {
-        let start = self.start.load(Ordering::Relaxed);
-        let end = self.end.load(Ordering::Relaxed);
+    fn wrap_len(&self, start: usize, end: usize) -> usize {
         if end >= start {
             end - start
         } else {
             self.cap() - start + end
         }
     }
-    pub fn is_empty(&self) -> bool {
+    pub fn len(&self) -> usize {
         let start = self.start.load(Ordering::Relaxed);
         let end = self.end.load(Ordering::Relaxed);
-        start == end
+        self.wrap_len(start, end)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
     pub fn is_full(&self) -> bool {
-        self.cap() - self.len() == 1
+        self.len() == self.capacity()
     }
     #[inline]
     unsafe fn buffer_read(&self, off: usize) -> T {
@@ -145,38 +146,41 @@ impl<T, const N: usize> Mpmc<T, N> {
         self.states = [Self::INIT_STATE; N];
     }
     pub fn pop(&self) -> Option<T> {
-        if self.is_empty() {
-            None
-        } else {
-            let start = self.start.load(Ordering::Relaxed);
-            if let Err(state) =
-                self.states[start].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
-                    match MemoryState::from(x) {
-                        MemoryState::Written => Some(MemoryState::Reading as u8),
-                        _ => None,
-                    }
-                })
-            {
-                match MemoryState::from(state) {
-                    MemoryState::Reading | MemoryState::Readed => {
-                        self.add_ptr_start(start);
-                        self.pop()
-                    }
+        let end = self.end.load(Ordering::Relaxed);
+        let start = self.start.load(Ordering::Relaxed);
+        let len = self.wrap_len(start, end);
+        if len == 0 {
+            return None;
+        }
+        if let Err(state) =
+            self.states[start].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
+                match MemoryState::from(x) {
+                    MemoryState::Written => Some(MemoryState::Reading as u8),
                     _ => None,
                 }
-            } else {
-                self.add_ptr_start(start);
-                let ret = unsafe { Some(self.buffer_read(start)) };
-                self.states[start].store(MemoryState::Readed.into(), Ordering::Relaxed);
-                ret
+            })
+        {
+            match MemoryState::from(state) {
+                MemoryState::Reading | MemoryState::Readed => {
+                    self.add_ptr_start(start);
+                    self.pop()
+                }
+                _ => None,
             }
+        } else {
+            self.add_ptr_start(start);
+            let ret = unsafe { Some(self.buffer_read(start)) };
+            self.states[start].store(MemoryState::Readed.into(), Ordering::Relaxed);
+            ret
         }
     }
     pub fn push(&self, value: T) -> Result<(), T> {
-        if self.is_full() {
+        let start = self.start.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
+        let len = self.wrap_len(start, end);
+        if len == self.capacity() {
             return Err(value);
         }
-        let end = self.end.load(Ordering::Relaxed);
         if let Err(state) =
             self.states[end].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
                 match MemoryState::from(x) {
