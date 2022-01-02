@@ -4,6 +4,7 @@ use common::*;
 use core::time::Duration;
 use etime::{expect_time, Etime};
 use fixed_queue::sync::mpmc::Mpmc;
+use std::collections::BTreeSet;
 use std::thread;
 
 #[test]
@@ -80,6 +81,7 @@ fn test_mpmc() {
 #[test]
 fn test_mpsc() {
     static MPMC: Mpmc<TestUsize, 100> = Mpmc::new();
+    let mut data_set: BTreeSet<usize> = (0..1000).collect();
     for i in 0..1000 {
         thread::spawn(move || loop {
             let etime = Etime::new();
@@ -97,21 +99,27 @@ fn test_mpsc() {
     }
 
     let h = thread::spawn(move || {
-        for _ in 0..1000 {
+        for i in 0..1000 {
+            let etime = Etime::new();
+            let start = etime.now();
             loop {
-                let etime = Etime::new();
                 etime.tic();
                 let result = MPMC.pop();
                 expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
                     println!("time to pop: {:?}", t);
                 });
-                if let Some(_) = result {
+                if let Some(i) = result {
+                    assert!(data_set.remove(&*i));
                     break;
                 } else {
+                    if etime.now() > start + 1_000_000_000 {
+                        panic!("{}:{:?} {:?}", i, data_set, MPMC);
+                    }
                     thread::yield_now();
                 }
             }
         }
+        assert!(data_set.is_empty());
     });
     let etime = Etime::new();
     etime.tic();
@@ -125,6 +133,7 @@ fn test_mpsc() {
 #[test]
 fn test_spsc() {
     static MPMC: Mpmc<TestUsize, 100> = Mpmc::new();
+    let mut data_set: BTreeSet<usize> = (0..1000).collect();
     thread::spawn(move || {
         for i in 0..1000 {
             loop {
@@ -144,21 +153,27 @@ fn test_spsc() {
     });
 
     let h = thread::spawn(move || {
-        for _ in 0..1000 {
+        for i in 0..1000 {
+            let etime = Etime::new();
+            let start = etime.now();
             loop {
-                let etime = Etime::new();
                 etime.tic();
                 let result = MPMC.pop();
                 expect_time(etime.toc(), Duration::ZERO..Duration::from_millis(1), |t| {
                     println!("time to pop: {:?}", t);
                 });
-                if let Some(_) = result {
+                if let Some(i) = result {
+                    assert!(data_set.remove(&*i));
                     break;
                 } else {
+                    if etime.now() > start + 1_000_000_000 {
+                        panic!("{}:{:?} {:?}", i, data_set, MPMC);
+                    }
                     thread::yield_now();
                 }
             }
         }
+        assert!(data_set.is_empty());
     });
     let etime = Etime::new();
     etime.tic();

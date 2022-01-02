@@ -1,6 +1,6 @@
-use super::common::MemoryState;
+use super::common::{MemoryOp, MemoryState};
 use core::mem::MaybeUninit;
-use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use core::{ptr, slice};
 
 pub struct Sender<'a, T, const N: usize> {
@@ -30,20 +30,21 @@ impl<'a, T, const N: usize> Receiver<'a, T, N> {
 #[derive(Debug)]
 pub struct Mpmc<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
-    end: AtomicUsize,
-    //Tail always points to the first element
-    start: AtomicUsize,
-    states: [AtomicU8; N],
+    /// always points to the first element
+    start: AtomicU32,
+    end: AtomicU32,
+    ops: [AtomicU32; N],
 }
 impl<T, const N: usize> Mpmc<T, N> {
     const CAPACITY: usize = N;
-    const INIT_STATE: AtomicU8 = AtomicU8::new(MemoryState::Uninitialized as u8);
+    const INIT_STATE: AtomicU32 = AtomicU32::new(0);
+    /// NOTICE: `N` mut bigger than 16
     pub const fn new() -> Self {
         Mpmc {
             buf: MaybeUninit::uninit(),
-            end: AtomicUsize::new(0),
-            start: AtomicUsize::new(0),
-            states: [Self::INIT_STATE; N],
+            end: AtomicU32::new(0),
+            start: AtomicU32::new(0),
+            ops: [Self::INIT_STATE; N],
         }
     }
     pub fn sender(&self) -> Sender<T, N> {
@@ -55,17 +56,16 @@ impl<T, const N: usize> Mpmc<T, N> {
     fn ptr(&self) -> *mut T {
         self.buf.as_ptr() as *mut T
     }
-    fn cap(&self) -> usize {
-        Self::CAPACITY
-    }
     pub fn capacity(&self) -> usize {
-        self.cap() - 1
+        Self::CAPACITY - 1
     }
-    fn wrap_len(&self, start: usize, end: usize) -> usize {
+    fn wrap_len(&self, start: u32, end: u32) -> usize {
+        let start = self.index(start as usize);
+        let end = self.index(end as usize);
         if end >= start {
             end - start
         } else {
-            self.cap() - start + end
+            Self::CAPACITY + end - start
         }
     }
     pub fn len(&self) -> usize {
@@ -88,43 +88,37 @@ impl<T, const N: usize> Mpmc<T, N> {
         ptr::write(self.ptr().add(off), value);
     }
     #[inline]
-    fn wrap_add(&self, idx: usize, addend: usize) -> usize {
-        let (index, overflow) = idx.overflowing_add(addend);
-        if index >= self.cap() || overflow {
-            index.wrapping_sub(self.cap())
-        } else {
-            index
-        }
+    fn group(&self, idx: usize) -> usize {
+        idx / Self::CAPACITY
     }
     #[inline]
-    fn _wrap_sub(&self, idx: usize, subtrahend: usize) -> usize {
-        let (index, overflow) = idx.overflowing_sub(subtrahend);
+    fn index(&self, idx: usize) -> usize {
+        idx % Self::CAPACITY
+    }
+    #[inline]
+    fn wrap_add(&self, old: u32, add: u32) -> u32 {
+        let (mut new, overflow) = old.overflowing_add(1);
         if overflow {
-            index.wrapping_add(self.cap())
-        } else {
-            index
+            new = self.index(old as usize) as u32 + add;
         }
+        new
     }
-    fn add_ptr_end(&self, old: usize) {
-        let _ = self.end.compare_exchange_weak(
-            old,
-            self.wrap_add(old, 1),
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-        );
+    fn add_ptr_end(&self, old: u32) {
+        let new = self.wrap_add(old, 1);
+        let _ = self
+            .end
+            .compare_exchange_weak(old, new, Ordering::Relaxed, Ordering::Relaxed);
     }
-    fn add_ptr_start(&self, old: usize) {
-        let _ = self.start.compare_exchange_weak(
-            old,
-            self.wrap_add(old, 1),
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-        );
+    fn add_ptr_start(&self, old: u32) {
+        let new = self.wrap_add(old, 1);
+        let _ = self
+            .start
+            .compare_exchange_weak(old, new, Ordering::Relaxed, Ordering::Relaxed);
     }
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         let ptr = self.ptr();
-        let start = self.start.load(Ordering::Relaxed);
-        let end = self.end.load(Ordering::Relaxed);
+        let start = self.index(self.start.load(Ordering::Relaxed) as usize);
+        let end = self.index(self.end.load(Ordering::Relaxed) as usize);
         if end >= start {
             (
                 unsafe { slice::from_raw_parts_mut(ptr.add(start), end - start) },
@@ -143,7 +137,7 @@ impl<T, const N: usize> Mpmc<T, N> {
         unsafe { ptr::drop_in_place(b) };
         self.end.store(0, Ordering::Relaxed);
         self.start.store(0, Ordering::Relaxed);
-        self.states = [Self::INIT_STATE; N];
+        self.ops = [Self::INIT_STATE; N];
     }
     pub fn pop(&self) -> Option<T> {
         let end = self.end.load(Ordering::Relaxed);
@@ -152,25 +146,39 @@ impl<T, const N: usize> Mpmc<T, N> {
         if len == 0 {
             return None;
         }
+        let group = self.group(start as usize) as u32;
+        let index = self.index(start as usize);
         if let Err(state) =
-            self.states[start].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
-                match MemoryState::from(x) {
-                    MemoryState::Written => Some(MemoryState::Reading as u8),
-                    _ => None,
+            self.ops[index].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
+                let op = MemoryOp::from(x);
+                if op.group == group {
+                    match op.state {
+                        MemoryState::Written => {
+                            Some(MemoryOp::new(group, MemoryState::Reading).into())
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
                 }
             })
         {
-            match MemoryState::from(state) {
-                MemoryState::Reading | MemoryState::Readed => {
-                    self.add_ptr_start(start);
-                    self.pop()
-                }
-                _ => None,
+            let op = MemoryOp::from(state);
+            if (op.state == MemoryState::Reading && op.group == group)
+                || (op.state == MemoryState::Uninitialized && op.group == group + 1)
+            {
+                self.add_ptr_start(start);
+                self.pop()
+            } else {
+                None
             }
         } else {
             self.add_ptr_start(start);
-            let ret = unsafe { Some(self.buffer_read(start)) };
-            self.states[start].store(MemoryState::Readed.into(), Ordering::Relaxed);
+            let ret = Some(unsafe { self.buffer_read(index) });
+            self.ops[index].store(
+                MemoryOp::new(group + 1, MemoryState::Uninitialized).into(),
+                Ordering::Relaxed,
+            );
             ret
         }
     }
@@ -181,27 +189,39 @@ impl<T, const N: usize> Mpmc<T, N> {
         if len == self.capacity() {
             return Err(value);
         }
+        let group = self.group(start as usize) as u32;
+        let index = self.index(end as usize);
         if let Err(state) =
-            self.states[end].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
-                match MemoryState::from(x) {
-                    MemoryState::Uninitialized | MemoryState::Readed => {
-                        Some(MemoryState::Writting as u8)
+            self.ops[index].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
+                let op = MemoryOp::from(x);
+                if op.group == group {
+                    match op.state {
+                        MemoryState::Uninitialized => {
+                            Some(MemoryOp::new(group, MemoryState::Writting).into())
+                        }
+                        _ => None,
                     }
-                    _ => None,
+                } else {
+                    None
                 }
             })
         {
-            match MemoryState::from(state) {
-                MemoryState::Writting | MemoryState::Written => {
-                    self.add_ptr_end(end);
-                    self.push(value)
-                }
-                _ => Err(value),
+            let op = MemoryOp::from(state);
+            if (op.state == MemoryState::Writting || op.state == MemoryState::Written)
+                && op.group == group
+            {
+                self.add_ptr_end(end);
+                self.push(value)
+            } else {
+                Err(value)
             }
         } else {
             self.add_ptr_end(end);
-            unsafe { self.buffer_write(end, value) };
-            self.states[end].store(MemoryState::Written.into(), Ordering::Relaxed);
+            unsafe { self.buffer_write(index, value) };
+            self.ops[index].store(
+                MemoryOp::new(group, MemoryState::Written).into(),
+                Ordering::Relaxed,
+            );
             Ok(())
         }
     }

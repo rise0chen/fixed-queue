@@ -36,6 +36,7 @@ impl<'a, T, const N: usize> Drop for Receiver<'a, T, N> {
     }
 }
 
+#[derive(Debug)]
 pub struct Spsc<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
     end: AtomicUsize,
@@ -58,12 +59,10 @@ impl<T, const N: usize> Spsc<T, N> {
         }
     }
     pub fn take_sender(&self) -> Option<Sender<T, N>> {
-        match self.has_sender.compare_exchange(
-            true,
-            false,
-            Ordering::SeqCst,
-            Ordering::Relaxed,
-        ) {
+        match self
+            .has_sender
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+        {
             Ok(_) => Some(Sender::new(self)),
             Err(_) => None,
         }
@@ -72,12 +71,10 @@ impl<T, const N: usize> Spsc<T, N> {
         self.has_sender.store(true, Ordering::Relaxed)
     }
     pub fn take_recver(&self) -> Option<Receiver<T, N>> {
-        match self.has_receiver.compare_exchange(
-            true,
-            false,
-            Ordering::SeqCst,
-            Ordering::Relaxed,
-        ) {
+        match self
+            .has_receiver
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+        {
             Ok(_) => Some(Receiver::new(self)),
             Err(_) => None,
         }
