@@ -39,10 +39,9 @@ impl<'a, T, const N: usize> Drop for Receiver<'a, T, N> {
 #[derive(Debug)]
 pub struct Spsc<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
-    end: AtomicUsize,
-    //Tail always points to the first element
+    /// always points to the first element
     start: AtomicUsize,
-    is_full: AtomicBool,
+    end: AtomicUsize,
     has_sender: AtomicBool,
     has_receiver: AtomicBool,
 }
@@ -53,7 +52,6 @@ impl<T, const N: usize> Spsc<T, N> {
             buf: MaybeUninit::uninit(),
             end: AtomicUsize::new(0),
             start: AtomicUsize::new(0),
-            is_full: AtomicBool::new(false),
             has_sender: AtomicBool::new(true),
             has_receiver: AtomicBool::new(true),
         }
@@ -88,24 +86,26 @@ impl<T, const N: usize> Spsc<T, N> {
     pub fn capacity(&self) -> usize {
         Self::CAPACITY
     }
-    fn len(&self) -> usize {
-        let start = self.start.load(Ordering::Relaxed);
-        let end = self.end.load(Ordering::Relaxed);
-        if self.is_full() {
-            self.capacity()
-        } else if end >= start {
+    fn wrap_max(&self) -> usize {
+        usize::MAX / Self::CAPACITY * Self::CAPACITY
+    }
+    fn wrap_len(&self, start: usize, end: usize) -> usize {
+        if end >= start {
             end - start
         } else {
-            self.capacity() - start + end
+            self.wrap_max() - start + end
         }
     }
-    fn is_empty(&self) -> bool {
+    pub fn len(&self) -> usize {
         let start = self.start.load(Ordering::Relaxed);
         let end = self.end.load(Ordering::Relaxed);
-        start == end && !self.is_full()
+        self.wrap_len(start, end)
     }
-    fn is_full(&self) -> bool {
-        self.is_full.load(Ordering::Relaxed)
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    pub fn is_full(&self) -> bool {
+        self.len() == self.capacity()
     }
     #[inline]
     unsafe fn buffer_read(&self, off: usize) -> T {
@@ -116,29 +116,27 @@ impl<T, const N: usize> Spsc<T, N> {
         ptr::write(self.ptr().add(off), value);
     }
     #[inline]
-    fn wrap_add(&self, idx: usize, addend: usize) -> usize {
-        let (index, overflow) = idx.overflowing_add(addend);
-        if index >= self.capacity() || overflow {
-            index.wrapping_sub(self.capacity())
-        } else {
-            index
-        }
+    fn index(&self, idx: usize) -> usize {
+        idx % Self::CAPACITY
     }
     #[inline]
-    fn _wrap_sub(&self, idx: usize, subtrahend: usize) -> usize {
-        let (index, overflow) = idx.overflowing_sub(subtrahend);
-        if overflow {
-            index.wrapping_add(self.capacity())
+    fn next_idx(&self, old: usize) -> usize {
+        if old == self.wrap_max() - 1 {
+            0
         } else {
-            index
+            old + 1
         }
     }
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         let ptr = self.ptr();
         let start = self.start.load(Ordering::Relaxed);
         let end = self.end.load(Ordering::Relaxed);
-        let is_full = self.is_full.load(Ordering::Relaxed);
-        if end >= start && !is_full {
+        if start == end {
+            return (&mut [], &mut []);
+        }
+        let start = self.index(start);
+        let end = self.index(end);
+        if end > start {
             (
                 unsafe { slice::from_raw_parts_mut(ptr.add(start), end - start) },
                 &mut [],
@@ -156,34 +154,44 @@ impl<T, const N: usize> Spsc<T, N> {
         unsafe { ptr::drop_in_place(b) };
         self.end.store(0, Ordering::Relaxed);
         self.start.store(0, Ordering::Relaxed);
-        self.is_full.store(false, Ordering::Relaxed);
     }
     fn pop(&self) -> Option<T> {
-        if self.is_empty() {
-            None
-        } else {
-            let start = self.start.load(Ordering::Relaxed);
-            self.start.store(self.wrap_add(start, 1), Ordering::Relaxed);
-            let _ = self.is_full.compare_exchange_weak(
-                true,
-                false,
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            );
-            unsafe { Some(self.buffer_read(start)) }
+        let end = self.end.load(Ordering::Relaxed);
+        let start = self.start.load(Ordering::Relaxed);
+        let len = self.wrap_len(start, end);
+        if len == 0 {
+            return None;
         }
+
+        let index = self.index(start);
+        self.start
+            .compare_exchange(
+                start,
+                self.next_idx(start),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .unwrap();
+        unsafe { Some(self.buffer_read(index)) }
     }
     fn push(&self, value: T) -> Result<(), T> {
-        if self.is_full() {
+        let start = self.start.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
+        let len = self.wrap_len(start, end);
+        if len == self.capacity() {
             return Err(value);
         }
 
-        if self.len() == self.capacity() - 1 {
-            self.is_full.store(true, Ordering::Relaxed);
-        }
-        let end = self.end.load(Ordering::Relaxed);
-        self.end.store(self.wrap_add(end, 1), Ordering::Relaxed);
-        unsafe { self.buffer_write(end, value) };
+        let index = self.index(end);
+        self.end
+            .compare_exchange(
+                end,
+                self.next_idx(end),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .unwrap();
+        unsafe { self.buffer_write(index, value) };
         Ok(())
     }
 }

@@ -9,7 +9,7 @@ use std::thread;
 
 #[test]
 fn test_base() {
-    static MPMC: Mpmc<TestUsize, 4> = Mpmc::new();
+    static MPMC: Mpmc<TestUsize, 3> = Mpmc::new();
     assert_eq!(MPMC.capacity(), 3);
 
     assert!(MPMC.push(TEST1.clone()).is_ok());
