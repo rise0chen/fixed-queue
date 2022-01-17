@@ -27,6 +27,7 @@ impl MemoryOp {
                 ret.group = self.group.next();
                 ret.state = MemoryState::Uninitialized;
             }
+            MemoryState::Seek => {}
         }
         ret
     }

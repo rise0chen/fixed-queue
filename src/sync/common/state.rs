@@ -4,4 +4,5 @@ pub enum MemoryState {
     Writting = 1,
     Written = 2,
     Reading = 3,
+    Seek = 8,
 }
