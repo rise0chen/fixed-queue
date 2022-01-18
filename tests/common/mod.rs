@@ -30,6 +30,7 @@ impl TestUsize {
 }
 impl Drop for TestUsize {
     fn drop(&mut self) {
+        // println!("drop: {}", self.data);
         if self.is_init == INIT_CODE.wrapping_add(self.data) {
             self.is_init = 0;
             self.drop_time += 1;

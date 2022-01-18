@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
 pub struct Seek<'a, T>(&'a AtomicOption<T>);
 impl<'a, T> Seek<'a, T> {
     /// remove it after all seek drop.
-    pub fn remove(&self) {
+    pub fn remove_after_drop(&self) {
         self.0.will_drop.store(true, Relaxed);
     }
 }
