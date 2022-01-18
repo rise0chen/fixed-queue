@@ -1,5 +1,6 @@
 use super::common::MemorySeek;
 use atomic::Atomic;
+use core::fmt;
 use core::mem::MaybeUninit;
 use core::ops::Deref;
 use core::ptr;
@@ -16,6 +17,11 @@ impl<'a, T> Deref for Seek<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { self.0.val.assume_init_ref() }
+    }
+}
+impl<'a, T: fmt::Debug> fmt::Debug for Seek<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self, f)
     }
 }
 impl<'a, T> Drop for Seek<'a, T> {
@@ -46,7 +52,6 @@ impl<'a, T> Drop for Seek<'a, T> {
     }
 }
 
-#[derive(Debug)]
 pub struct AtomicOption<T> {
     val: MaybeUninit<T>,
     state: Atomic<MemorySeek>,
@@ -109,6 +114,11 @@ impl<T> AtomicOption<T> {
             self.state.store(MemorySeek::WRITTEN, Relaxed);
             Ok(())
         }
+    }
+}
+impl<T: fmt::Debug> fmt::Debug for AtomicOption<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.seek(), f)
     }
 }
 impl<T> Drop for AtomicOption<T> {

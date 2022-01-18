@@ -36,7 +36,6 @@ impl<'a, T, const N: usize> Drop for Receiver<'a, T, N> {
     }
 }
 
-#[derive(Debug)]
 pub struct Spsc<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
     /// always points to the first element

@@ -113,7 +113,7 @@ fn test_mpsc() {
                     break;
                 } else {
                     if etime.now() > start + 1_000_000_000 {
-                        panic!("{}:{:?} {:?}", i, data_set, MPMC);
+                        panic!("{}:{:?}", i, data_set);
                     }
                     thread::yield_now();
                 }
@@ -167,7 +167,7 @@ fn test_spsc() {
                     break;
                 } else {
                     if etime.now() > start + 1_000_000_000 {
-                        panic!("{}:{:?} {:?}", i, data_set, MPMC);
+                        panic!("{}:{:?}", i, data_set);
                     }
                     thread::yield_now();
                 }

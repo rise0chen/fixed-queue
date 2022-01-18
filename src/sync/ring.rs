@@ -4,7 +4,6 @@ use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::{ptr, slice};
 
-#[derive(Debug)]
 pub struct AtomicRing<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
     /// always points to the first element

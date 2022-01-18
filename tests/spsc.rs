@@ -77,7 +77,7 @@ fn test_spsc() {
                     break;
                 } else {
                     if etime.now() > start + 1_000_000_000 {
-                        panic!("{}:{:?} {:?}", i, data_set, SPSC);
+                        panic!("{}:{:?}", i, data_set);
                     }
                     thread::yield_now();
                 }

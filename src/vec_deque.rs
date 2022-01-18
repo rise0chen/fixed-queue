@@ -1,8 +1,8 @@
+use core::fmt;
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 use core::{ptr, slice};
 
-#[derive(Debug)]
 pub struct VecDeque<T, const N: usize> {
     buf: MaybeUninit<[T; N]>,
     end: usize,
@@ -85,7 +85,7 @@ impl<T, const N: usize> VecDeque<T, N> {
             None
         }
     }
-    pub fn as_slices(&mut self) -> (&[T], &[T]) {
+    pub fn as_slices(&self) -> (&[T], &[T]) {
         let ptr = self.ptr() as *const T;
         if self.end >= self.start && !self.is_full {
             (
@@ -183,6 +183,11 @@ impl<T, const N: usize> IndexMut<usize> for VecDeque<T, N> {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut T {
         self.get_mut(index).expect("Out of bounds access")
+    }
+}
+impl<T: fmt::Debug, const N: usize> fmt::Debug for VecDeque<T, N> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.as_slices(), f)
     }
 }
 impl<T, const N: usize> Drop for VecDeque<T, N> {

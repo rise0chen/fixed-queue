@@ -25,7 +25,6 @@ impl<'a, T, const N: usize> Receiver<'a, T, N> {
     }
 }
 
-#[derive(Debug)]
 pub struct Mpmc<T, const N: usize> {
     ring: AtomicRing<T, N>,
 }
