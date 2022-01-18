@@ -34,13 +34,13 @@ impl<T, const N: usize> AtomicVec<T, N> {
         }
         None
     }
-    /// push a value to random position
-    pub fn push(&self, mut value: T) -> Result<(), T> {
+    /// push a value to random position, return index
+    pub fn push(&self, mut value: T) -> Result<usize, T> {
         for index in 0..self.capacity() {
             if let Err(v) = self.buf[index].push(value) {
                 value = v;
             } else {
-                return Ok(());
+                return Ok(index);
             }
         }
         Err(value)
