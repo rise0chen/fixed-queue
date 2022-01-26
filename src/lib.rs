@@ -3,7 +3,6 @@
 mod history;
 mod linear_map;
 mod linear_set;
-pub mod sync;
 mod vec;
 mod vec_deque;
 

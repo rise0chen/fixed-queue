@@ -1,33 +1,34 @@
-mod common;
-
-use common::*;
 use fixed_queue::LinearSet;
 
 #[test]
 fn test_base() {
-    let mut set: LinearSet<TestUsize, 3> = LinearSet::new();
+    let mut set: LinearSet<usize, 3> = LinearSet::new();
     assert_eq!(set.capacity(), 3);
     assert!(set.is_empty());
 
-    assert_eq!(set.insert(TEST1.clone()), Ok(true));
-    assert_eq!(set.insert(TEST1.clone()), Ok(false));
-    assert!(set.contains(&TEST1));
-    assert!(set.insert(TEST2.clone()).is_ok());
-    assert!(set.contains(&TEST2));
-    assert!(set.insert(TEST3.clone()).is_ok());
-    assert!(set.contains(&TEST3));
-    assert!(set.insert(TEST4.clone()).is_err());
-    assert!(!set.contains(&TEST4));
-    assert!(set.remove(&TEST1));
-    assert!(!set.remove(&TEST1));
-    assert!(!set.contains(&TEST1));
-    assert!(set.insert(TEST5.clone()).is_ok());
-    assert!(set.contains(&TEST5));
+    assert_eq!(set.insert(1), Ok(true));
+    assert_eq!(set.insert(1), Ok(false));
+    assert!(set.contains(&1));
+    assert!(set.insert(2).is_ok());
+    assert!(set.contains(&2));
+    assert!(set.insert(3).is_ok());
+    assert!(set.contains(&3));
+    assert!(set.insert(4).is_err());
+    assert!(!set.contains(&4));
+    assert!(set.remove(&1));
+    assert!(!set.remove(&1));
+    assert!(!set.contains(&1));
+    assert!(set.insert(5).is_ok());
+    assert!(set.contains(&5));
 }
 
 #[test]
 fn test_drop() {
-    let mut set: LinearSet<TestUsize, 3> = LinearSet::new();
-    assert!(set.insert(TEST1.clone()).is_ok());
-    assert!(set.insert(TEST2.clone()).is_ok());
+    use on_drop::OnDrop;
+
+    let mut set: LinearSet<_, 3> = LinearSet::new();
+    let (item, token) = OnDrop::token(1);
+    assert!(set.insert(item).is_ok());
+    drop(set);
+    assert!(token.is_droped());
 }

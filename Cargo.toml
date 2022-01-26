@@ -1,19 +1,18 @@
 [package]
 authors = ["rise0chen <rise0chen@163.com>"]
 categories = ["data-structures", "embedded"]
-description = "no_std, no_alloc, lock-free, wait-free, use [T; N]. support `Vec`/`VecDeque`/`spsc`/`History`"
+description = "no_std, no_alloc, use [T; N]. support `Vec`/`VecDeque`/`History`"
 documentation = "https://docs.rs/fixed-queue"
 edition = "2018"
 homepage = "https://blog.crise.cn"
-keywords = ["no_std", "vec", "queue", "spsc", "deque"]
+keywords = ["no_std", "vec", "queue", "deque"]
 license-file = "LICENSE"
 name = "fixed-queue"
 readme = "./README.md"
 repository = "https://github.com/rise0chen/fixed-queue.git"
-version = "0.4.9"
+version = "0.5.0"
 
 [dependencies]
-atomic = {version = "0.5", default-features = false}
 
 [dev-dependencies]
-etime = "0.1"
+on_drop = "0.1"
