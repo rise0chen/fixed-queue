@@ -4,6 +4,8 @@ Some Commin Data Structure, use [T; N].
 
 support `Vec`/`VecDeque`/`spsc`/`mpmc`/`History`.
 
+Move `sync` to `ach`
+
 ## Features
 
 All Data Structure has these Features:
