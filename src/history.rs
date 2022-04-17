@@ -23,12 +23,10 @@ impl<T, const N: usize> History<T, N> {
     fn as_ptr(&self) -> *mut T {
         self.logs.as_ptr() as *mut T
     }
-}
-impl<T: PartialEq, const N: usize> History<T, N> {
     /// 添加记录
     pub fn insert(&mut self, value: T) {
         let last = self.last;
-        let ret = if self.is_full {
+        if self.is_full {
             unsafe { slice::from_raw_parts_mut(self.as_ptr(), Self::CAPACITY)[last] = value };
         } else {
             unsafe { ptr::write(self.as_ptr().add(last), value) };
@@ -39,7 +37,6 @@ impl<T: PartialEq, const N: usize> History<T, N> {
         } else {
             self.last = last + 1;
         }
-        ret
     }
 }
 impl<T, const N: usize> Deref for History<T, N> {
